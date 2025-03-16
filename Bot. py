@@ -1,0 +1,95 @@
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler
+import logging
+import pytz
+from datetime import datetime
+
+# Логтарды баптау
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+
+# Токенді осында қой (жеке сақта!)
+TOKEN = "8178613284:AAHAx7YftQC9zHyL3OouPepT3jBSZYcw8Sg"
+
+# Брондау үшін күйлер
+SELECT_DATE, SELECT_TIME, SELECT_PEOPLE = range(3)
+
+# Бастау командасы
+async def start(update: Update, context):
+    await update.message.reply_text(
+        "Сәлем! Бұл Cafe Nur брондау боты. Орын брондау үшін /book командасын жазыңыз."
+    )
+
+# Брондау процесін бастау
+async def book(update: Update, context):
+    await update.message.reply_text("Қай күнге брондағыңыз келеді? (Күні: КК/AA/YYYY)")
+    return SELECT_DATE
+
+# Күнді таңдау
+async def select_date(update: Update, context):
+    user_date = update.message.text
+    try:
+        datetime.strptime(user_date, "%d/%m/%Y")  # Дұрыс формат па, тексереміз
+        context.user_data["date"] = user_date
+        await update.message.reply_text("Қай уақытқа брондайсыз? (Мысалы: 18:30)")
+        return SELECT_TIME
+    except ValueError:
+        await update.message.reply_text("Күнді дұрыс форматта енгізіңіз (КК/AA/YYYY).")
+        return SELECT_DATE
+
+# Уақытты таңдау
+async def select_time(update: Update, context):
+    user_time = update.message.text
+    try:
+        datetime.strptime(user_time, "%H:%M")  # Дұрыс формат па, тексереміз
+        context.user_data["time"] = user_time
+        await update.message.reply_text("Қанша адамға орын брондайсыз?")
+        return SELECT_PEOPLE
+    except ValueError:
+        await update.message.reply_text("Уақытты дұрыс форматта енгізіңіз (HH:MM).")
+        return SELECT_TIME
+
+# Адам санын таңдау
+async def select_people(update: Update, context):
+    people_count = update.message.text
+    if not people_count.isdigit():
+        await update.message.reply_text("Тек сан енгізіңіз.")
+        return SELECT_PEOPLE
+
+    context.user_data["people"] = people_count
+    date = context.user_data["date"]
+    time = context.user_data["time"]
+
+    await update.message.reply_text(
+        f"Брондау расталды!\n📅 Күні: {date}\n⏰ Уақыты: {time}\n👥 Адам саны: {people_count}"
+    )
+    return ConversationHandler.END
+
+# Болдырмау
+async def cancel(update: Update, context):
+    await update.message.reply_text("Брондау тоқтатылды.", reply_markup=ReplyKeyboardRemove())
+    return ConversationHandler.END
+
+# Ботты іске қосу
+def main():
+    app = Application.builder().token(TOKEN).build()
+
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("book", book)],
+        states={
+            SELECT_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, select_date)],
+            SELECT_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, select_time)],
+            SELECT_PEOPLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, select_people)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(conv_handler)
+
+    print("✅ Бот іске қосылды!")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
